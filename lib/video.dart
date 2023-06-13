@@ -1,11 +1,10 @@
 import 'dart:io';
 import 'package:camera/camera.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:video_compress/video_compress.dart';
 import 'package:video_player/video_player.dart';
-
+import 'dart:async';
 import 'camera.dart';
 
 class Video extends StatefulWidget {
@@ -171,99 +170,158 @@ class _VideoState extends State<Video> {
   }
 }
 
-class PreviewPage extends StatelessWidget {
+class PreviewPage extends StatefulWidget {
   const PreviewPage({Key? key, required this.videoFile, required this.originalFileSize}) : super(key: key);
 
   final File videoFile;
   final int originalFileSize;
 
   @override
+  _PreviewPageState createState() => _PreviewPageState();
+}
+
+class _PreviewPageState extends State<PreviewPage> {
+  late VideoPlayerController _videoPlayerController;
+  bool _isPlaying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _videoPlayerController = VideoPlayerController.file(widget.videoFile)
+      ..initialize().then((_) {
+        setState(() {});
+      });
+  }
+
+  @override
+  void dispose() {
+    _videoPlayerController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _playPauseVideo() async {
+    if (_videoPlayerController.value.isPlaying) {
+      await _videoPlayerController.pause();
+      setState(() {
+        _isPlaying = false;
+      });
+    } else {
+      await _videoPlayerController.play();
+      setState(() {
+        _isPlaying = true;
+      });
+    }
+  }
+
+  @override
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Preview Page')),
-      body:
-      Container(
-        child: Center(
-          child: ListView(
-            children: [
-              AspectRatio(
+      body: Container(
+        color: Colors.black,
+        child: Stack(
+          children: [
+            Center(
+              child: AspectRatio(
                 aspectRatio: 1 / 1,
-                child: VideoPlayerWidget(videoFile: videoFile),
+                child: VideoPlayer(_videoPlayerController),
               ),
-              SizedBox(height: 20,),
-              FutureBuilder<Duration>(
-                future: VideoPlayerWidget.getVideoDuration(videoFile),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const CircularProgressIndicator();
-                  }
-                  if (snapshot.hasData) {
-                    return Text(
-                      'Video Duration: ${getFormattedDuration(snapshot.data!)}',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    );
-                  }
-                  if (snapshot.hasError) {
-                    return Text(
-                      'Failed to get video duration',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    );
-                  }
-                  return const SizedBox();
-                },
+            ),
+            Positioned(
+              top: MediaQuery.of(context).size.height * 0.5 - 48, // Adjust the top position based on your requirements
+              left: MediaQuery.of(context).size.width * 0.5 - 48, // Adjust the left position based on your requirements
+              child: FloatingActionButton(
+                onPressed: _playPauseVideo,
+                child: Icon(_isPlaying ? Icons.pause : Icons.play_arrow),
+                backgroundColor: Colors.transparent,
               ),
-              SizedBox(height: 20,),
-              Text(
-                'Original Video Size: ${getFormattedFileSize(originalFileSize)}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            Positioned(
+              bottom: 16,
+              left: 16,
+              right: 16,
+              child: Column(
+                children: [
+                  SizedBox(height: 10,),
+                  FutureBuilder<Duration>(
+                    future: VideoPlayerWidget.getVideoDuration(widget.videoFile),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const CircularProgressIndicator();
+                      }
+                      if (snapshot.hasData) {
+                        return Text(
+                          'Video Duration: ${getFormattedDuration(snapshot.data!)}',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                        );
+                      }
+                      if (snapshot.hasError) {
+                        return const Text(
+                          'Failed to get video duration',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                        );
+                      }
+                      return const SizedBox();
+                    },
+                  ),
+                 SizedBox(height: 20),
+                  Text(
+                    'Original Video Size: ${getFormattedFileSize(widget.originalFileSize)}',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  SizedBox(height: 20),
+                  FutureBuilder<String>(
+                    future: VideoPlayerWidget.getVideoFileSize(widget.videoFile),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const CircularProgressIndicator();
+                      }
+                      if (snapshot.hasData) {
+                        return Text(
+                          'Compressed Video Size: ${getFormattedFileSize(int.parse(snapshot.data!))}',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                        );
+                      }
+                      if (snapshot.hasError) {
+                        return Text(
+                          'Failed to get compressed video size',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                        );
+                      }
+                      return const SizedBox();
+                    },
+                  ),
+                  SizedBox(height: 20),
+                  const TextField(
+                    keyboardType: TextInputType.multiline,
+                    maxLines: 8,
+                    minLines: 1,
+                    decoration: InputDecoration(
+                      hintText: 'Type a message...',
+                      fillColor: Colors.white,
+                      filled: true,
+                    ),
+                  ),
+                  SizedBox(height: 10),
+                  Center(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        copyFile(widget.videoFile.path, '/storage/emulated/0/Download/dev');
+                      },
+                      icon: Icon(Icons.send),
+                      label: Text('Send'),
+                    ),
+                  ),
+                ],
               ),
-              SizedBox(height: 20,),
-              FutureBuilder<String>(
-                future: VideoPlayerWidget.getVideoFileSize(videoFile),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const CircularProgressIndicator();
-                  }
-                  if (snapshot.hasData) {
-                    return Text(
-                      'Compressed Video Size: ${getFormattedFileSize(int.parse(snapshot.data!))}',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    );
-                  }
-                  if (snapshot.hasError) {
-                    return const Text(
-                      'Failed to get compressed video size',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    );
-                  }
-                  return const SizedBox();
-                },
-              ),
-              SizedBox(height: 20,),
-              const TextField(
-                keyboardType: TextInputType.multiline,
-                maxLines: 8,
-                minLines: 1,
-                decoration: InputDecoration(
-                  hintText: 'Type a message...',
-                ),
-              ),
-              SizedBox(height: 10,),
-              Center(
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    copyFile(videoFile.path, '/storage/emulated/0/Download/dev');
-                  },
-                  icon: Icon(Icons.send),
-                  label: Text('Send'),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
+
 
   String getFormattedFileSize(int fileSizeInBytes) {
     double sizeInKB = fileSizeInBytes / 1024;
@@ -281,6 +339,7 @@ class PreviewPage extends StatelessWidget {
     return '${twoDigits(duration.inHours)}:$twoDigitMinutes:$twoDigitSeconds';
   }
 }
+
 
 class VideoPlayerWidget extends StatefulWidget {
   const VideoPlayerWidget({Key? key, required this.videoFile}) : super(key: key);
